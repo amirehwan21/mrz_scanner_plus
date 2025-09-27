@@ -9,7 +9,7 @@ class MaskPainter extends CustomPainter {
   const MaskPainter({
     this.animationValue,
     this.indicatorColor = const Color(0xFFE1DED7),
-    this.overlayColor = Colors.black54,
+    this.overlayColor = Colors.black26,
   });
 
   @override
@@ -25,6 +25,32 @@ class MaskPainter extends CustomPainter {
     final double top = (size.height - cardHeight) / 2;
 
     const cornerRadius = 18.0;
+    const double cardCornerRadius = 12.0;
+    final Rect cardRect = Rect.fromLTWH(left, top, cardWidth, cardHeight);
+    final RRect cardRRect =
+        RRect.fromRectAndRadius(cardRect, const Radius.circular(cardCornerRadius));
+
+    // Draw helper title
+    const String title = 'Scan photo page';
+    final TextPainter titlePainter = TextPainter(
+      text: TextSpan(
+        text: title,
+        style: TextStyle(
+          color: const Color(0xFFFFFFFF),
+          fontSize: cardHeight * 0.06,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.5,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: cardWidth);
+
+    final double titleY = max(16, top - titlePainter.height - 12);
+    final Offset titleOffset = Offset(
+      (size.width - titlePainter.width) / 2,
+      titleY,
+    );
+    titlePainter.paint(canvas, titleOffset);
 
     // Draw the semi-transparent overlay
     canvas.drawPath(
@@ -32,15 +58,60 @@ class MaskPainter extends CustomPainter {
         PathOperation.difference,
         Path()..addRect(Rect.fromLTWH(0, 0, size.width, size.height)),
         Path()
-          ..addRRect(RRect.fromRectAndRadius(
-            Rect.fromLTWH(left, top, cardWidth, cardHeight),
-            const Radius.circular(8.0),
-          )),
+          ..addRRect(cardRRect),
       ),
       paint,
     );
 
-    const lineLength = 40.0;
+    final Paint cardBorderPaint = Paint()
+      ..color = indicatorColor.withOpacity(0.55)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
+    canvas.drawRRect(cardRRect, cardBorderPaint);
+
+    final double mrzHeight = cardHeight * 0.22;
+    final Rect mrzRect = Rect.fromLTWH(
+      cardRect.left + cardWidth * 0.04,
+      cardRect.bottom - mrzHeight - cardHeight * 0.04,
+      cardWidth - cardWidth * 0.08,
+      mrzHeight,
+    );
+
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(mrzRect, const Radius.circular(6)),
+      Paint()..color = indicatorColor.withOpacity(0.08),
+    );
+
+    final double mrzFontSize = mrzHeight * 0.38;
+    final int charCount = max(20, (mrzRect.width / (mrzFontSize * 0.55)).floor());
+    final String mrzLine = '<' * charCount;
+    final TextStyle mrzStyle = TextStyle(
+      color: indicatorColor.withOpacity(0.75),
+      fontSize: mrzFontSize,
+      letterSpacing: 1.5,
+      fontWeight: FontWeight.w600,
+    );
+
+    final TextPainter mrzPainterTop = TextPainter(
+      text: TextSpan(text: mrzLine, style: mrzStyle),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+      ellipsis: '',
+    )..layout(maxWidth: mrzRect.width);
+
+    final TextPainter mrzPainterBottom = TextPainter(
+      text: TextSpan(text: mrzLine, style: mrzStyle),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+      ellipsis: '',
+    )..layout(maxWidth: mrzRect.width);
+
+    final double mrzTopOffset = mrzRect.top + mrzHeight * 0.18;
+    final double mrzBottomOffset = mrzRect.top + mrzHeight * 0.6;
+
+    mrzPainterTop.paint(canvas, Offset(mrzRect.left, mrzTopOffset));
+    mrzPainterBottom.paint(canvas, Offset(mrzRect.left, mrzBottomOffset));
 
     const horizontalLineLength = 30.0;
     const verticalLineLength = 20.0;

@@ -5,9 +5,9 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:mrz_parser/mrz_parser.dart';
+import 'package:mrz_scanner_plus/src/mrz_helper.dart';
 import 'package:mrz_scanner_plus/src/mask_painter.dart';
-import 'package:mrz_scanner_plus/src/mrz_parser/mrz_result.dart';
-import 'package:mrz_scanner_plus/src/parser.dart';
 
 typedef OnMRZDetected = void Function(String imagePath, MRZResult mrzResult);
 typedef OnDetected = void Function(String recognizeText);
@@ -63,6 +63,7 @@ class _CameraViewState extends State<CameraView> with SingleTickerProviderStateM
   late TextRecognizer _textRecognizer;
 
   late AnimationController _animationController;
+  late Color _currentIndicatorColor;
 
   @override
   void initState() {
@@ -72,6 +73,7 @@ class _CameraViewState extends State<CameraView> with SingleTickerProviderStateM
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
+    _currentIndicatorColor = widget.indicatorColor ?? const Color(0xFFE1DED7);
     _initializeCamera();
   }
 
@@ -82,13 +84,16 @@ class _CameraViewState extends State<CameraView> with SingleTickerProviderStateM
     final camera = cameras.first;
     _controller = CameraController(
       camera,
-      ResolutionPreset.veryHigh,
+      ResolutionPreset.max,
       enableAudio: false,
+      // imageFormatGroup: ImageFormatGroup.yuv420,
+      imageFormatGroup: Platform.isAndroid
+          ? ImageFormatGroup.nv21 // for Android
+          : ImageFormatGroup.bgra8888, // for iOS
     );
 
     await _controller?.initialize();
     if (widget.mode == CameraMode.scan) {
-      await Future.delayed(Duration(milliseconds: Platform.isAndroid ? 500 : 2000));
       await _startImageStream();
     }
     if (mounted) setState(() {});
@@ -99,7 +104,7 @@ class _CameraViewState extends State<CameraView> with SingleTickerProviderStateM
   DateTime _lastProcessTime = DateTime.now();
 
   Future<void> _startImageStream() async {
-    _controller?.startImageStream((CameraImage image) async {
+    await _controller?.startImageStream((CameraImage image) async {
       final now = DateTime.now();
       if (_isProcessing || now.difference(_lastProcessTime).inMilliseconds < 500) {
         return;
@@ -111,16 +116,28 @@ class _CameraViewState extends State<CameraView> with SingleTickerProviderStateM
         final InputImage inputImage = _processImageForMlKit(image);
         final recognizedText = await _textRecognizer.processImage(inputImage);
         widget.onDetected?.call(recognizedText.text);
-        final mrzResult = Parser.parse(recognizedText.text);
-        if (mrzResult == null || widget.onMRZDetected == null) return;
-        if (mrzResult.isUnAvailable()) return;
-
-        if (_controller != null && _controller!.value.isInitialized) {
-          await _controller?.stopImageStream();
-          final cropFile = await _takeAndCropImage();
-          Future.delayed(const Duration(milliseconds: 500), () {
+        final mrzResult = MRZHelper.parse(recognizedText.text);
+        if (mrzResult != null && widget.onMRZDetected != null) {
+          if (_controller != null && _controller!.value.isInitialized) {
+            if (mounted) {
+              setState(() {
+                _currentIndicatorColor = Colors.green;
+              });
+            }
+            await Future.delayed(const Duration(milliseconds: 200));
+            if (!mounted) {
+              return;
+            }
+            await _controller?.stopImageStream();
+            if (!mounted) {
+              return;
+            }
+            final cropFile = await _takeAndCropImage();
+            if (!mounted) {
+              return;
+            }
             widget.onMRZDetected?.call(cropFile.path, mrzResult);
-          });
+          }
         }
       } catch (e) {
         debugPrint(e.toString());
@@ -145,7 +162,7 @@ class _CameraViewState extends State<CameraView> with SingleTickerProviderStateM
       metadata: InputImageMetadata(
         size: imageSize,
         rotation: imageRotation,
-        format: Platform.isAndroid ? InputImageFormat.nv21 : InputImageFormat.bgra8888,
+        format: InputImageFormat.yuv420,
         bytesPerRow: image.planes.first.bytesPerRow,
       ),
     );
@@ -153,9 +170,6 @@ class _CameraViewState extends State<CameraView> with SingleTickerProviderStateM
 
   @override
   void dispose() {
-    if (_controller?.value.isStreamingImages ?? false) {
-      _controller?.stopImageStream();
-    }
     _controller?.dispose();
     _textRecognizer.close();
     _animationController.dispose();
@@ -197,7 +211,7 @@ class _CameraViewState extends State<CameraView> with SingleTickerProviderStateM
                 return CustomPaint(
                   painter: MaskPainter(
                     animationValue: _animationController.value,
-                    indicatorColor: widget.indicatorColor ?? const Color(0xFFE1DED7),
+                    indicatorColor: _currentIndicatorColor,
                   ),
                   size: Size.infinite,
                   child: Container(),
@@ -209,7 +223,7 @@ class _CameraViewState extends State<CameraView> with SingleTickerProviderStateM
           CustomPaint(
             painter: MaskPainter(
               animationValue: null,
-              indicatorColor: widget.indicatorColor ?? const Color(0xFFE1DED7),
+              indicatorColor: _currentIndicatorColor,
             ),
             size: Size.infinite,
             child: Container(),
@@ -269,7 +283,7 @@ class _CameraViewState extends State<CameraView> with SingleTickerProviderStateM
     final bool isPortrait = image.height > image.width;
 
     // 计算护照尺寸（与遮罩框相同的比例1.42:1）
-    final double cardWidth = realWidth /** 0.85*/;
+    final double cardWidth = realWidth * 0.85;
     final double cardHeight = cardWidth / 1.42;
     final double left = (image.width - cardWidth) / 2;
     final double top = (image.height - cardHeight) / 2;
