@@ -86,10 +86,7 @@ class _CameraViewState extends State<CameraView> with SingleTickerProviderStateM
       camera,
       ResolutionPreset.max,
       enableAudio: false,
-      // imageFormatGroup: ImageFormatGroup.yuv420,
-      imageFormatGroup: Platform.isAndroid
-          ? ImageFormatGroup.nv21 // for Android
-          : ImageFormatGroup.bgra8888, // for iOS
+      imageFormatGroup: ImageFormatGroup.yuv420,
     );
 
     await _controller?.initialize();
