@@ -60,6 +60,7 @@ class CameraView extends StatefulWidget {
 
 class _CameraViewState extends State<CameraView> with SingleTickerProviderStateMixin {
   CameraController? _controller;
+  CameraDescription? _camera;
   late TextRecognizer _textRecognizer;
 
   late AnimationController _animationController;
@@ -82,11 +83,14 @@ class _CameraViewState extends State<CameraView> with SingleTickerProviderStateM
     if (cameras.isEmpty) return;
 
     final camera = cameras.first;
+    _camera = camera;
     _controller = CameraController(
       camera,
       ResolutionPreset.max,
       enableAudio: false,
-      imageFormatGroup: ImageFormatGroup.yuv420,
+      imageFormatGroup: Platform.isAndroid
+          ? ImageFormatGroup.nv21
+          : ImageFormatGroup.bgra8888,
     );
 
     await _controller?.initialize();
@@ -152,14 +156,22 @@ class _CameraViewState extends State<CameraView> with SingleTickerProviderStateM
     final bytes = allBytes.done().buffer.asUint8List();
 
     final Size imageSize = Size(image.width.toDouble(), image.height.toDouble());
-    const InputImageRotation imageRotation = InputImageRotation.rotation0deg;
+
+    final imageRotation = InputImageRotationValue.fromRawValue(
+          _camera?.sensorOrientation ?? 0,
+        ) ??
+        InputImageRotation.rotation0deg;
+
+    final inputImageFormat = Platform.isAndroid
+        ? InputImageFormat.nv21
+        : InputImageFormat.bgra8888;
 
     return InputImage.fromBytes(
       bytes: bytes,
       metadata: InputImageMetadata(
         size: imageSize,
         rotation: imageRotation,
-        format: InputImageFormat.yuv420,
+        format: inputImageFormat,
         bytesPerRow: image.planes.first.bytesPerRow,
       ),
     );
