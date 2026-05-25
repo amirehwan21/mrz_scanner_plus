@@ -133,11 +133,7 @@ class _CameraViewState extends State<CameraView> with SingleTickerProviderStateM
             if (!mounted) {
               return;
             }
-            final cropFile = await _takeAndCropImage();
-            if (!mounted) {
-              return;
-            }
-            widget.onMRZDetected?.call(cropFile.path, mrzResult);
+            widget.onMRZDetected?.call('', mrzResult);
           }
         }
       } catch (e) {
